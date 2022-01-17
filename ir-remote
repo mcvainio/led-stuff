@@ -1,0 +1,450 @@
+//import the necessary libraries
+#include "FastLED.h"
+#include "IRremote.h"
+
+//define some variables
+#define LEDPIN     6
+#define RECV_PIN  3
+#define LED_TYPE     NEOPIXEL
+#define NUM_LEDS    <?????>
+#define BRIGHTNESS  200
+CRGB leds[NUM_LEDS];
+CRGB endclr;
+CRGB midclr;
+
+//define time code to use
+#define TC(HOURS,MINUTES,SECONDS) \
+((uint32_t)(((uint32_t)((HOURS)*(uint32_t)(3600000))) + \
+((uint32_t)((MINUTES)*(uint32_t)(60000))) + \
+((uint32_t)((SECONDS)*(uint32_t)(1000)))))
+#define AT(HOURS,MINUTES,SECONDS) if( atTC(TC(HOURS,MINUTES,SECONDS)) )
+#define FROM(HOURS,MINUTES,SECONDS) if( fromTC(TC(HOURS,MINUTES,SECONDS)) )
+
+//set up IR receiver information
+IRrecv irrecv(RECV_PIN);
+decode_results results;
+
+//<————————————————————————————SETUP————————————————————————————>
+void setup() {
+//begin serial communication
+  Serial.begin(9600);
+//sanity delay
+  delay(3000); 
+//start the receiver
+  irrecv.enableIRIn(); 
+  
+//set up LED strip information
+FastLED.addLeds<LED_TYPE,LEDPIN>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+FastLED.setBrightness(BRIGHTNESS);
+}
+
+//<—————————————————————————LOOP———————————————————————————————>
+void loop() {
+//decode IR results
+if (irrecv.decode(&results)) {
+
+//declare changing variables, such as rotating colours
+uint8_t gHue = 0;  
+uint8_t colour = beatsin8(130, 0, 150);
+uint8_t slow = beatsin8(40,0,255);
+uint8_t fast = beatsin8(70,0,255);
+uint8_t dot = beatsin8(50, 0, NUM_LEDS);
+uint8_t beat = beatsin8( 70, 64, 255);
+uint8_t beat2 = beatsin8( 50, 64, 255);
+uint32_t gTimeCodeBase = 0;
+uint32_t gTimeCode = 0;
+uint32_t gLastTimeCodeDoneAt = 0;
+uint32_t gLastTimeCodeDoneFrom = 0;
+
+//set up at vs from commands (i think?)
+static bool atTC( uint32_t tc) 
+{
+bool maybe = false;
+if( gTimeCode >= tc) {
+if( gLastTimeCodeDoneAt < tc) {
+maybe = true;
+gLastTimeCodeDoneAt = tc;
+}
+}
+return maybe;
+}
+
+static bool fromTC( uint32_t tc)
+{
+bool maybe = false;
+if( gTimeCode >= tc) {
+if( gLastTimeCodeDoneFrom <= tc) {
+maybe = true;
+gLastTimeCodeDoneFrom = tc;
+}
+}
+return maybe;
+}
+
+//custom performance sequence
+//to gardens & villa space time
+void Performance()
+{
+AT(0,0,00.001) { FastLED.setBrightness(150); }
+FROM(0,0,00.100) { addGlitter(80); }
+AT(0,0,05) { strobe(); }  //to initial 7 beats
+FROM(0,0,06) { colourfadein(); } 
+FROM(0,0,18) { rainbowisomode(); } 
+FROM(0,0,25) { policechase(); } 
+FROM(0,0,32) { confetti(); }
+FROM(0,0,35) { halfchasegreen(); }
+FROM(0,0,41) { pearlescent(); }
+FROM(0,0,46) { colourstrobe(); }  
+FROM(0,0,58) { acidwipe(); }  
+FROM(0,1,07) { rainbow(); } 
+FROM(0,1,12) {rainbowWithGlitter(); } 
+FROM(0,1,15) {(isomodePPO); }
+AT(0,1,19.500) { twobouncechaseGG(); }  
+AT(0,1,23) { twobouncechaseGGreturning(); }
+FROM(0,1,26.500) { rainbow(); }  //(CHANGE TO 4BANDBOUNCE)
+FROM(0,1,07) { juggle(); }  
+FROM(0,1,07) { sunrisegradient(); } 
+FROM(0,1,07) { sunrisetosunset(); }
+FROM(0,1,07) { sunsetgradient(); }
+FROM(0,1,07) { sunsetglitter(); }
+FROM(0,1,07) { sunsettodusk(); }
+FROM(0,1,07) { dusk(); }
+FROM(0,1,07) { duskglitter(); }
+FROM(0,1,07) { dusk(); }
+FROM(0,1,07) { duskglitter(); }
+FROM(0,1,07) { duskchase(); }
+
+}
+
+//<——————————————————BUTTON FUNCTIONS—————————————————————————>
+//power button = rainbow gradient, press again for gradient chase
+if (results.value == 0xFD00FF){
+fill_rainbow( leds, NUM_LEDS, gHue, 7 );
+}
+
+//vol+ = brightness full
+if (results.value == 0xFD807F){
+FastLED.setBrightness(255);
+}
+
+//vol- = brightness down
+if (results.value == 0xFD906F){
+fadeLightBy(leds, NUM_LEDS, 30);
+}
+
+//play/pause = starts & restarts custom sequence
+if (results.value == 0xFDA05F) {
+RestartPerformance;
+}
+
+//left = Left on colour wheel, starting w red
+if (results.value == 0xFD20DF) {
+}
+
+//right = Right on colour wheel, starting w red
+if (results.value == 0xFD609F) {
+}
+
+
+
+//up = bpm faster
+if (results.value == 0xFD50AF) {
+CRGBPalette16 palette = PartyColors_p;
+for( int i = 0; i < NUM_LEDS; i++) { 
+leds[i] = ColorFromPalette(palette, gHue+(i*2), beat-gHue+(i*10));}
+}
+
+//down = bpm slower
+if (results.value == 0xFD10EF) {
+
+}
+
+
+//func/stop = fades btwn colours
+if (results.value == 0xFD40BF) {
+fill_solid(leds, NUM_LEDS, CHSV(slow, 255, 150));
+}
+
+
+//eq = strobes btwn colours
+if (results.value == 0xFDB04F) {
+fill_solid(leds, NUM_LEDS, CHSV(fast, 255, 150));
+}
+
+//st/rept = chases btwn colours
+if (results.value == 0xFD708F) {
+
+}
+
+
+// 0 = colourblock, press for different patterns/colours
+if (results.value == 0xFD30CF) {
+}
+
+// 1 = single chasers, press for different colour schemes/band widths (ex police siren)
+if (results.value == 0xFD08F7) {
+fill_gradient(leds, 0, CHSV(160,185,210), NUM_LEDS-1, CHSV(237,141,255));
+}
+
+// 2 = iso mode, press through different colour schemes/block widths
+if (results.value == 0xFD8877) {
+fill_gradient_RGB(leds, 0, CHSV(150,255,200), NUM_LEDS-1, CHSV(25,255,255));
+}
+
+// 3 = bouncers, press through for different band #s, widths & colours
+if (results.value == 0xFD48B7) {
+
+
+// 4 = gradients, press for different colours schemes
+if (results.value == 0xFD28D7) {
+fill_gradient_RGB(leds, 0, CHSV(160,255,150), NUM_LEDS-1, CHSV(180,230,80));
+}
+
+// 5 = gradient chasers, same colours as 4
+if (results.value == 0xFDA857) {
+fill_gradient_RGB(leds, 0, CHSV(160,255,150), NUM_LEDS-1, CHSV(180,230,80)); 
+addGlitter(80);
+}
+  
+// 6 = repeating static patterns
+if (results.value == 0xFD6897) {
+fadeToBlackBy( leds, NUM_LEDS, 30);
+int pos = random16(NUM_LEDS);
+leds[pos] = CHSV(135,80,200);
+}
+  
+// 7 = twinkle, press for different colour schemes
+if (results.value == 0xFD18E7) {
+fadeToBlackBy( leds, NUM_LEDS, 130);
+int pos = random16(NUM_LEDS);
+leds[pos] = CRGB::Green;
+}
+
+// 8 = strobe, press for different colour schemes
+if (results.value == 0xFD9867) {
+fadeToBlackBy( leds, NUM_LEDS, 30);
+addGlitter(50);
+}
+
+// 9 = pov
+if (results.value == 0xFD58A7) {
+fadeToBlackBy( leds, NUM_LEDS, 30);
+fill_solid(leds,NUM_LEDS,CHSV(0,0,50));
+addGlitter(60);
+lightning();
+}
+
+
+//rotating base colour used by many of the patterns
+FastLED.delay(1000/120);
+EVERY_N_MILLISECONDS( 20 ) { gHue++; }  
+FastLED.show();
+irrecv.resume(); // Receive the next value
+}
+}
+
+//<——————————————————————EXPANDED FUNCTIONS————————————————————>
+
+
+
+void orangehoop() {
+fill_solid(leds, 0, NUM_LEDS-1, CRGB::Orange:); }
+}
+
+void twocolourblock()
+{
+fill_solid(leds, 0, NUM_LEDS/2, CRGB::Blue:);
+fill_solid(leds, NUM_LEDS/2, NUM_LEDS-1, CRGB::Green:);
+}
+
+void threecolourblock()
+{
+fill_solid(leds, 0, NUM_LEDS/3, CRGB::Pink:);
+fill_solid(leds, NUM_LEDS/3, NUM_LEDS*2/3, CRGB::Orange:);
+fill_solid(leds, NUM_LEDS*2/3, NUM_LEDS-1, CRGB::Purple:);
+}
+
+
+void pokeballcolourblock() //nice for sports team colours
+{
+fill_solid(leds, 0, NUM_LEDS/5, CRGB::Red:);
+fill_solid(leds, NUM_LEDS/5, NUM_LEDS*3/10, CRGB::White:);
+fill_solid(leds, NUM_LEDS*3/10, NUM_LEDS*7/10, CRGB::Red:);
+fill_solid(leds, NUM_LEDS*7/10, NUM_LEDS*4/5, CRGB::White:);
+fill_solid(leds, NUM_LEDS*4/5, NUM_LEDS-1, CRGB::Red:); 
+}
+
+void rainbow() 
+{ fill_rainbow( leds, NUM_LEDS, gHue, 7); }
+
+void rainbowWithGlitter()
+{ rainbow();
+addGlitter(80); }
+
+void addGlitter( fract8 chanceOfGlitter) 
+{
+  if( random8() < chanceOfGlitter) {
+    leds[ random16(NUM_LEDS) ] += CRGB::White;
+  }
+}
+
+void confetti() 
+{
+  // random colored speckles that blink in and fade smoothly
+  fadeToBlackBy( leds, NUM_LEDS, 10);
+  int pos = random16(NUM_LEDS);
+  leds[pos] += CHSV( gHue + random8(64), 200, 255);
+}
+
+void juggle() {
+  // eight colored dots, weaving in and out of sync with each other
+  fadeToBlackBy( leds, NUM_LEDS, 20);
+  byte dothue = 0;
+  for( int i = 0; i < 8; i++) {
+    leds[beatsin16(i+7,0,NUM_LEDS)] |= CHSV(dothue, 200, 255);
+    dothue += 32;
+  }
+}
+
+
+void colourchasein()  
+{
+uint8_t dot1 = beatsin8(50, 0, NUM_LEDS);
+leds[dot1] = CRGB::Green;
+}
+
+void acidwipe()
+{
+uint8_t dot1 = beatsin8(50, 0, NUM_LEDS);
+uint8_t colour = beatsin8(50, 60, 255);
+leds[dot1] = CHSV(colour, 200, 255);
+}
+
+
+
+void colourfadein() {
+uint8_t i = beatsin8(1, 0, 150);
+fill_solid(leds, NUM_LEDS, CHSV(i, 255, 150));
+}
+
+void colourstrobe() {
+uint8_t i = beatsin8(120, 0, 150);
+fill_solid(leds, NUM_LEDS, CHSV(i, 255, 150));
+}
+
+void sunrisetosunset()
+{uint8_t speed = beatsin8(6,0,255);
+  endclr = blend(CHSV(237,51,180), CHSV(160,255,150), speed);
+  midclr = blend(CHSV(142,80,180), CHSV(25,255,180), speed);
+
+  fill_gradient_RGB(leds, 0, endclr, NUM_LEDS/2, midclr);
+  fill_gradient_RGB(leds, NUM_LEDS/2+1, midclr, NUM_LEDS, endclr);
+}
+
+void duskchase()
+{uint8_t speed = beatsin8(6,0,255);
+  endclr = blend(CHSV(160,255,150), CHSV(180,230,80), speed);
+  midclr = blend(CHSV(180,230,80), CHSV(160,255,150), speed);
+
+  fill_gradient_RGB(leds, 0, endclr, NUM_LEDS/2, midclr);
+  fill_gradient_RGB(leds, NUM_LEDS/2+1, midclr, NUM_LEDS, endclr);
+}
+
+
+
+void strobe()
+{uint8_t j = beatsin8(1, 0, 200);
+fill_solid(leds, NUM_LEDS, CHSV(0, 0, j));
+
+}
+
+
+void halfchasegreen()
+{
+uint8_t firstdot = beatsin8(60, 0, NUM_LEDS);
+leds[firstdot].b = 150;
+leds[firstdot] = CRGB::Green;
+leds[firstdot+1] = CRGB::Green;
+leds[firstdot-1] = CRGB::Green;
+  
+EVERY_N_MILLISECONDS(1000)
+{
+fadeToBlackBy(leds, NUM_LEDS, 30);
+} }
+
+void rainbowisomode() {
+uint8_t reddot = beatsin8(60, 0, NUM_LEDS);
+leds[reddot] = CRGB::Red;
+leds[reddot+NUM_LEDS/6] = CRGB::Orange;
+leds[reddot+NUM_LEDS/3] = CRGB::Yellow;
+leds[reddot+NUM_LEDS/2] = CRGB::Green;
+leds[reddot+NUM_LEDS*2/3] = CRGB::Blue;
+leds[reddot+NUM_LEDS*5/6] = CRGB::Purple;
+
+}
+
+
+void policechase()
+{
+uint8_t reddot = beatsin8(60, 0, NUM_LEDS);
+leds[reddot] = CRGB::Red;
+leds[reddot-1] = CRGB::Blue;
+leds[reddot-2] = CRGB::Black;
+}
+
+
+void pearlescent() {
+uint8_t firstdot = beatsin8(60, 0, NUM_LEDS);
+leds[firstdot].b = 150;
+leds[firstdot] = CRGB::PaleGoldenrod;
+leds[firstdot+1] = CRGB::PaleTurquoise;
+leds[firstdot-1] = CRGB::PeachPuff;
+leds[firstdot+NUM_LEDS/3] = CRGB::PaleGoldenrod;
+leds[firstdot+NUM_LEDS/3+1] = CRGB::PaleTurquoise;
+leds[firstdot+NUM_LEDS/3-1] = CRGB::PeachPuff;
+leds[firstdot+NUM_LEDS*2/3] = CRGB::PaleGoldenrod;
+leds[firstdot+NUM_LEDS*2/3+1] = CRGB::PaleTurquoise;
+leds[firstdot+NUM_LEDS*2/3-1] = CRGB::PeachPuff;
+
+  
+EVERY_N_MILLISECONDS(1000)
+{
+fadeToBlackBy(leds, NUM_LEDS, 100);
+}}
+
+
+void isomodePPO() {
+uint8_t reddot = beatsin8(60, 0, NUM_LEDS);
+leds[reddot] = CRGB::Purple;
+leds[reddot+NUM_LEDS/6] = CRGB::Orange;
+leds[reddot+NUM_LEDS/3] = CRGB::Pink;
+leds[reddot+NUM_LEDS/2] = CRGB::Purple;
+leds[reddot+NUM_LEDS*2/3] = CRGB::Orange;
+leds[reddot+NUM_LEDS*5/6] = CRGB::Pink;
+
+
+EVERY_N_MILLISECONDS(500)
+{
+fadeToBlackBy(leds, NUM_LEDS, 50);
+}
+}
+
+void scanchase()
+{
+  // a colored dot sweeping back and forth, with fading trails
+  fadeToBlackBy( leds, NUM_LEDS, 20);
+  int pos = beatsin16(13,0,NUM_LEDS);
+  leds[pos] += CHSV( gHue, 255, 192);
+}
+
+void bpm()
+{
+  // colored stripes pulsing at a defined Beats-Per-Minute (BPM)
+  uint8_t BeatsPerMinute = 62;
+  CRGBPalette16 palette = PartyColors_p;
+  uint8_t beat = beatsin8( BeatsPerMinute, 64, 255);
+  for( int i = 0; i < NUM_LEDS; i++) { //9948
+    leds[i] = ColorFromPalette(palette, gHue+(i*2), beat-gHue+(i*10));
+  }
+}
+  
