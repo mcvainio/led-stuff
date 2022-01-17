@@ -11,7 +11,7 @@
 CRGB leds[NUM_LEDS];
 CRGB endclr;
 CRGB midclr;
-
+ 
 //define time code to use
 #define TC(HOURS,MINUTES,SECONDS) \
 ((uint32_t)(((uint32_t)((HOURS)*(uint32_t)(3600000))) + \
